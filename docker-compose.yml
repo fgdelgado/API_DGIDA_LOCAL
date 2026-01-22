@@ -1,0 +1,18 @@
+services:
+  api:
+    build: .
+    container_name: fastapi_api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - dynamodb
+    volumes:
+      - ./app:/app
+    restart: always
+
+  dynamodb:
+    image: amazon/dynamodb-local
+    container_name: dynamodb_local
+    restart: always
