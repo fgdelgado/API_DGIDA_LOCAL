@@ -79,7 +79,7 @@ La API estará disponible en:
 
 ---
 
-## 🩺 Endpoint de estado (health check)
+## Endpoint de estado (health check)
 
 Para verificar que todo está funcionando:
 
