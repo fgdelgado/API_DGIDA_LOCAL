@@ -15,6 +15,7 @@ services:
   dynamodb:
     image: amazon/dynamodb-local
     container_name: dynamodb_local
+    user: "0:0" # se ocupa root solo porque es ambiente de prueba
     ports:
       - "8001:8000"
     command:
