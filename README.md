@@ -43,6 +43,7 @@ Antes de empezar asegúrate de tener instalado:
 - Docker
 - Docker Compose
 - Git
+- AWS CLI
 
 ---
 
