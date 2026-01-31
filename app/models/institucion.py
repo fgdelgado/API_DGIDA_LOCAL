@@ -28,7 +28,7 @@ class InstitucionResponse(BaseModel):
     municipio_sede: str
     telefono: str
     correo: str
-    enable: bool
+    habil: bool
     fecha_creacion: str
     fecha_actualizacion: str
 

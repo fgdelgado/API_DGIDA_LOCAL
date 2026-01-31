@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
 from typing import List, Optional
 
-# Cliente DynamoDB
-from database import get_dynamodb_client
+# DynamoDB (resource, NO client)
+from database import get_dynamodb_resource
 
 # Modelos Pydantic
 from models.institucion import (
@@ -13,61 +13,75 @@ from models.institucion import (
     InstitucionListItem,
 )
 
-# Utilidad para generar IDs
+# Utilidad para generar IDs con prefijo (INST-xxxx)
 from utils.id_generator import generate_id
 
-# Router de FastAPI para instituciones
+# --------------------------------------------------
+# Router de FastAPI para Instituciones
+# --------------------------------------------------
 router = APIRouter(
     prefix="/instituciones",
     tags=["Instituciones"]
 )
 
-# Cliente DynamoDB
-dynamodb = get_dynamodb_client()
+# --------------------------------------------------
+# Conexión a DynamoDB (resource)
+# --------------------------------------------------
+dynamodb = get_dynamodb_resource()
 
 # Nombre de la tabla DynamoDB
 TABLE_NAME = "api_data"
 
+# Referencia a la tabla
+table = dynamodb.Table(TABLE_NAME)
+
+# --------------------------------------------------
+# Crear institución
+# POST /instituciones
+# --------------------------------------------------
 @router.post("", response_model=InstitucionResponse)
 def crear_institucion(data: InstitucionCreate):
-    # Fecha actual en formato ISO
+    # Fecha actual en formato ISO 8601
     now = datetime.utcnow().isoformat()
 
-    # Generar ID con prefijo
+    # Generar ID de institución (ej: INST-abc123)
     id_institucion = generate_id("INST-")
 
     # Item que se guardará en DynamoDB
     item = {
+        # Claves primarias
         "PK": f"INSTITUCION#{id_institucion}",  # Partition Key
         "SK": "METADATA",                      # Sort Key
+
+        # Datos propios de la institución
         "id_institucion": id_institucion,
-        **data.model_dump(),                   # Datos enviados por el cliente
-        "enable": True,                        # Activa por defecto
+        **data.model_dump(),
+
+        # Campos de control
+        "habil": True,
         "fecha_creacion": now,
         "fecha_actualizacion": now,
     }
 
     # Guardar en DynamoDB
-    dynamodb.put_item(
-        TableName=TABLE_NAME,
-        Item=item
-    )
+    table.put_item(Item=item)
 
-    # Devolver la institución creada
     return item
 
+# --------------------------------------------------
+# Obtener institución por ID
+# GET /instituciones/{id}
+# --------------------------------------------------
 @router.get("/{id_institucion}", response_model=InstitucionResponse)
 def obtener_institucion(id_institucion: str):
-    # Buscar la institución por PK y SK
-    response = dynamodb.get_item(
-        TableName=TABLE_NAME,
+    response = table.get_item(
         Key={
             "PK": f"INSTITUCION#{id_institucion}",
             "SK": "METADATA",
-        },
+        }
     )
 
-    # Si no existe, devolver error 404
+    # Si no existe, error 404
     if "Item" not in response:
         raise HTTPException(
             status_code=404,
@@ -76,23 +90,25 @@ def obtener_institucion(id_institucion: str):
 
     return response["Item"]
 
+# --------------------------------------------------
+# Listar instituciones
+# GET /instituciones?habil=true|false
+# --------------------------------------------------
 @router.get("", response_model=List[InstitucionListItem])
-def listar_instituciones(
-    enable: Optional[bool] = Query(None)
-):
-    # Scan (válido por ahora, luego se optimiza)
-    response = dynamodb.scan(TableName=TABLE_NAME)
+def listar_instituciones(habil: Optional[bool] = Query(None)):
+    # Scan completo (válido para pruebas; luego se optimiza)
+    response = table.scan()
     items = response.get("Items", [])
 
     instituciones = []
 
     for item in items:
-        # Solo tomamos instituciones (SK = METADATA)
+        # Aseguramos que sea una institución
         if item.get("SK") != "METADATA":
             continue
 
-        # Filtrar por enable si viene en query
-        if enable is not None and item.get("enable") != enable:
+        # Filtrar por habil si viene en la query
+        if habil is not None and item.get("habil") != habil:
             continue
 
         # Devolver solo id y nombre
@@ -103,6 +119,10 @@ def listar_instituciones(
 
     return instituciones
 
+# --------------------------------------------------
+# Actualizar institución (parcial)
+# PATCH /instituciones/{id}
+# --------------------------------------------------
 @router.patch("/{id_institucion}", response_model=InstitucionResponse)
 def actualizar_institucion(id_institucion: str, data: InstitucionUpdate):
     now = datetime.utcnow().isoformat()
@@ -110,27 +130,22 @@ def actualizar_institucion(id_institucion: str, data: InstitucionUpdate):
     update_expression = []
     expression_values = {}
 
-    # Construir dinámicamente el SET
+    # Campos dinámicos
     for field, value in data.model_dump(exclude_none=True).items():
         update_expression.append(f"{field} = :{field}")
         expression_values[f":{field}"] = value
 
-    # Validar que haya algo para actualizar
     if not update_expression:
         raise HTTPException(
             status_code=400,
             detail="No hay campos para actualizar"
         )
 
-    # Actualizar fecha
-    update_expression.append(
-        "fecha_actualizacion = :fecha_actualizacion"
-    )
+    # Fecha de actualización
+    update_expression.append("fecha_actualizacion = :fecha_actualizacion")
     expression_values[":fecha_actualizacion"] = now
 
-    # Ejecutar actualización
-    response = dynamodb.update_item(
-        TableName=TABLE_NAME,
+    response = table.update_item(
         Key={
             "PK": f"INSTITUCION#{id_institucion}",
             "SK": "METADATA",
@@ -142,23 +157,27 @@ def actualizar_institucion(id_institucion: str, data: InstitucionUpdate):
 
     return response["Attributes"]
 
+
+
+# --------------------------------------------------
+# Eliminar institución (delete lógico)
+# DELETE /instituciones/{id}
+# --------------------------------------------------
 @router.delete("/{id_institucion}")
 def eliminar_institucion(id_institucion: str):
     now = datetime.utcnow().isoformat()
 
-    # Delete lógico: solo se desactiva
-    dynamodb.update_item(
-        TableName=TABLE_NAME,
+    table.update_item(
         Key={
             "PK": f"INSTITUCION#{id_institucion}",
             "SK": "METADATA",
         },
         UpdateExpression=(
-            "SET enable = :enable, "
+            "SET habil = :habil, "
             "fecha_actualizacion = :fecha"
         ),
         ExpressionAttributeValues={
-            ":enable": False,
+            ":habil": False,
             ":fecha": now,
         },
     )
