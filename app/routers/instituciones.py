@@ -157,6 +157,33 @@ def actualizar_institucion(id_institucion: str, data: InstitucionUpdate):
 
     return response["Attributes"]
 
+# --------------------------------------------------
+# Habilitar institución
+# PATCH /instituciones/{id}/habilitar
+# --------------------------------------------------
+@router.patch("/{id_institucion}/habilitar")
+def habilitar_institucion(id_institucion: str):
+    now = datetime.utcnow().isoformat()
+
+    table.update_item(
+        Key={
+            "PK": f"INSTITUCION#{id_institucion}",
+            "SK": "METADATA",
+        },
+        UpdateExpression=(
+            "SET habil = :habil, "
+            "fecha_actualizacion = :fecha"
+        ),
+        ExpressionAttributeValues={
+            ":habil": True,
+            ":fecha": now,
+        },
+    )
+
+    return {
+        "message": "Institución activada correctamente"
+    }
+
 
 
 # --------------------------------------------------
