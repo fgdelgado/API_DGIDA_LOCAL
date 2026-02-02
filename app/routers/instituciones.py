@@ -6,7 +6,7 @@ from typing import List, Optional
 from database import get_dynamodb_resource
 
 # Modelos Pydantic
-from models.institucion import (
+from models.instituciones import (
     InstitucionCreate,
     InstitucionUpdate,
     InstitucionResponse,
