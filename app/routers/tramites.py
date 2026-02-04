@@ -149,16 +149,22 @@ def actualizar_tramite(id_tramite: str, data: TramiteUpdate):
     update_expression.append("fecha_actualizacion = :fecha")
     expression_values[":fecha"] = now
 
-    response = table.update_item(
-        Key={
+    # Construcción segura del update
+    update_kwargs = {
+        "Key": {
             "PK": tramite["PK"],
             "SK": tramite["SK"],
         },
-        UpdateExpression="SET " + ", ".join(update_expression),
-        ExpressionAttributeNames=expression_names if expression_names else None,
-        ExpressionAttributeValues=expression_values,
-        ReturnValues="ALL_NEW",
-    )
+        "UpdateExpression": "SET " + ", ".join(update_expression),
+        "ExpressionAttributeValues": expression_values,
+        "ReturnValues": "ALL_NEW",
+    }
+
+    # SOLO si se usó 'habil'
+    if expression_names:
+        update_kwargs["ExpressionAttributeNames"] = expression_names
+
+    response = table.update_item(**update_kwargs)
 
     return response["Attributes"]
 
