@@ -15,6 +15,13 @@ class ProyectoCreate(ProyectoBase):
     pass
 
 
+class ProyectoListItem(BaseModel):
+    id_proyecto: str
+    nombre: str
+    estado_proyecto: str
+    habil: bool
+
+
 class ProyectoUpdate(BaseModel):
     nombre: Optional[str] = None
     descripcion: Optional[str] = None

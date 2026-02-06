@@ -1,12 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
 from uuid import uuid4
+from typing import List, Optional
 
 from database import get_dynamodb_resource
-from models.proyecto import (
+from models.proyectos import (
     ProyectoCreate,
     ProyectoUpdate,
-    ProyectoResponse
+    ProyectoResponse,
+    ProyectoListItem
 )
 
 router = APIRouter(
@@ -38,6 +40,40 @@ def crear_proyecto(data: ProyectoCreate):
 
     table.put_item(Item=item)
     return item
+
+# Listar proyectos
+# GET /proyectos
+# --------------------------------------------------
+@router.get("", response_model=List[ProyectoListItem])
+def listar_proyectos(
+    id_institucion: Optional[str] = Query(None),
+    habil: Optional[bool] = Query(None),
+):
+    # Scan temporal (igual que trámites e instituciones)
+    response = table.scan()
+    items = response.get("Items", [])
+
+    proyectos = []
+
+    for item in items:
+        # Solo proyectos
+        if not item.get("PK", "").startswith("PROYECTO#"):
+            continue
+
+        if id_institucion and item.get("id_institucion") != id_institucion:
+            continue
+
+        if habil is not None and item.get("habil") != habil:
+            continue
+
+        proyectos.append({
+            "id_proyecto": item["id_proyecto"],
+            "nombre": item["nombre"],
+            "estado_proyecto": item["estado_proyecto"],
+            "habil": item["habil"],
+        })
+
+    return proyectos
 
 #Obtener proyecto por ID (GET)
 @router.get("/{id_proyecto}", response_model=ProyectoResponse)
