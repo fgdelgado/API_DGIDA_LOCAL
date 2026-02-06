@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from database import check_dynamodb_connection
 from routers.instituciones import router as instituciones_router
 from routers.tramites import router as tramites_router
+from routers.proyectos import router as proyectos_router
 
 app = FastAPI()
 
@@ -17,3 +18,4 @@ def health():
     }
 app.include_router(instituciones_router)
 app.include_router(tramites_router)
+app.include_router(proyectos_router)
