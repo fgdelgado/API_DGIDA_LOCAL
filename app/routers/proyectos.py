@@ -3,6 +3,8 @@ from datetime import datetime
 from uuid import uuid4
 from typing import List, Optional
 
+from boto3.dynamodb.conditions import Key
+
 from database import get_dynamodb_resource
 from models.proyectos import (
     ProyectoCreate,
@@ -17,17 +19,27 @@ router = APIRouter(
 )
 
 dynamodb = get_dynamodb_resource()
-table = dynamodb.Table("api_data")
+table = dynamodb.Table("api_data_nube")
 
-#Crear proyecto (POST)
-@router.post("/", response_model=ProyectoResponse)
+# --------------------------------------------------
+# Crear proyecto
+# POST /proyectos
+# --------------------------------------------------
+@router.post("", response_model=ProyectoResponse)
 def crear_proyecto(data: ProyectoCreate):
     now = datetime.utcnow().isoformat()
-    id_proyecto = str(uuid4())
+    id_proyecto = f"PRY-{uuid4().hex[:8]}"
 
     item = {
-        "PK": f"PROYECTO#{id_proyecto}",
-        "SK": "METADATA",
+        # PK principal (agrupado por institución)
+        "PK": f"INSTITUCION#{data.id_institucion}",
+        "SK": f"PROYECTO#{id_proyecto}",
+
+        # GSI para acceso directo por id_proyecto
+        "GSI1PK": f"PROYECTO#{id_proyecto}",
+        "GSI1SK": "METADATA",
+
+        # Datos
         "id_proyecto": id_proyecto,
         "id_institucion": data.id_institucion,
         "nombre": data.nombre,
@@ -35,34 +47,32 @@ def crear_proyecto(data: ProyectoCreate):
         "estado_proyecto": data.estado_proyecto,
         "habil": data.habil,
         "fecha_creacion": now,
-        "fecha_actualizacion": None,
+        "fecha_actualizacion": now,
     }
 
     table.put_item(Item=item)
     return item
 
-# Listar proyectos
-# GET /proyectos
+# --------------------------------------------------
+# Listar proyectos por institución (OPTIMIZADO)
+# GET /proyectos?id_institucion=...
 # --------------------------------------------------
 @router.get("", response_model=List[ProyectoListItem])
 def listar_proyectos(
-    id_institucion: Optional[str] = Query(None),
+    id_institucion: str = Query(...),
     habil: Optional[bool] = Query(None),
 ):
-    # Scan temporal (igual que trámites e instituciones)
-    response = table.scan()
-    items = response.get("Items", [])
+    response = table.query(
+        KeyConditionExpression=(
+            Key("PK").eq(f"INSTITUCION#{id_institucion}") &
+            Key("SK").begins_with("PROYECTO#")
+        )
+    )
 
+    items = response.get("Items", [])
     proyectos = []
 
     for item in items:
-        # Solo proyectos
-        if not item.get("PK", "").startswith("PROYECTO#"):
-            continue
-
-        if id_institucion and item.get("id_institucion") != id_institucion:
-            continue
-
         if habil is not None and item.get("habil") != habil:
             continue
 
@@ -75,39 +85,48 @@ def listar_proyectos(
 
     return proyectos
 
-#Obtener proyecto por ID (GET)
+# --------------------------------------------------
+# Obtener proyecto por ID (GSI)
+# GET /proyectos/{id_proyecto}
+# --------------------------------------------------
 @router.get("/{id_proyecto}", response_model=ProyectoResponse)
 def obtener_proyecto(id_proyecto: str):
-    response = table.get_item(
-        Key={
-            "PK": f"PROYECTO#{id_proyecto}",
-            "SK": "METADATA",
-        }
+    response = table.query(
+        IndexName="GSI1",
+        KeyConditionExpression=Key("GSI1PK").eq(f"PROYECTO#{id_proyecto}")
     )
 
-    item = response.get("Item")
-    if not item:
+    items = response.get("Items", [])
+    if not items:
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
 
-    return item
+    return items[0]
 
-#Actualizar proyecto (PATCH)
+# --------------------------------------------------
+# Actualizar proyecto
+# PATCH /proyectos/{id_proyecto}
+# --------------------------------------------------
 @router.patch("/{id_proyecto}", response_model=ProyectoResponse)
 def actualizar_proyecto(id_proyecto: str, data: ProyectoUpdate):
     now = datetime.utcnow().isoformat()
 
+    response = table.query(
+        IndexName="GSI1",
+        KeyConditionExpression=Key("GSI1PK").eq(f"PROYECTO#{id_proyecto}")
+    )
+
+    items = response.get("Items", [])
+    if not items:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    proyecto = items[0]
+
     update_expression = []
     expression_values = {}
-    expression_names = {}
 
     for field, value in data.model_dump(exclude_none=True).items():
-        if field == "habil":
-            update_expression.append("#habil = :habil")
-            expression_names["#habil"] = "habil"
-            expression_values[":habil"] = value
-        else:
-            update_expression.append(f"{field} = :{field}")
-            expression_values[f":{field}"] = value
+        update_expression.append(f"{field} = :{field}")
+        expression_values[f":{field}"] = value
 
     if not update_expression:
         raise HTTPException(status_code=400, detail="No hay campos para actualizar")
@@ -115,41 +134,63 @@ def actualizar_proyecto(id_proyecto: str, data: ProyectoUpdate):
     update_expression.append("fecha_actualizacion = :fecha")
     expression_values[":fecha"] = now
 
-    update_kwargs = {
-        "Key": {
-            "PK": f"PROYECTO#{id_proyecto}",
-            "SK": "METADATA",
+    response = table.update_item(
+        Key={
+            "PK": proyecto["PK"],
+            "SK": proyecto["SK"],
         },
-        "UpdateExpression": "SET " + ", ".join(update_expression),
-        "ExpressionAttributeValues": expression_values,
-        "ReturnValues": "ALL_NEW",
-    }
+        UpdateExpression="SET " + ", ".join(update_expression),
+        ExpressionAttributeValues=expression_values,
+        ReturnValues="ALL_NEW",
+    )
 
-    if expression_names:
-        update_kwargs["ExpressionAttributeNames"] = expression_names
-
-    response = table.update_item(**update_kwargs)
     return response["Attributes"]
 
-#Eliminar proyecto (DELETE lógico)
+# --------------------------------------------------
+# Eliminar proyecto (delete lógico)
+# --------------------------------------------------
 @router.delete("/{id_proyecto}")
 def eliminar_proyecto(id_proyecto: str):
+    return _set_habil_proyecto(id_proyecto, False)
+
+# --------------------------------------------------
+# Habilitar proyecto
+# --------------------------------------------------
+@router.patch("/{id_proyecto}/habilitar")
+def habilitar_proyecto(id_proyecto: str):
+    return _set_habil_proyecto(id_proyecto, True)
+
+# --------------------------------------------------
+# Función interna reutilizable
+# --------------------------------------------------
+def _set_habil_proyecto(id_proyecto: str, habil: bool):
     now = datetime.utcnow().isoformat()
+
+    response = table.query(
+        IndexName="GSI1",
+        KeyConditionExpression=Key("GSI1PK").eq(f"PROYECTO#{id_proyecto}")
+    )
+
+    items = response.get("Items", [])
+    if not items:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    proyecto = items[0]
 
     table.update_item(
         Key={
-            "PK": f"PROYECTO#{id_proyecto}",
-            "SK": "METADATA",
+            "PK": proyecto["PK"],
+            "SK": proyecto["SK"],
         },
-        UpdateExpression="SET #habil = :habil, fecha_actualizacion = :fecha",
-        ExpressionAttributeNames={
-            "#habil": "habil"
-        },
+        UpdateExpression="SET habil = :habil, fecha_actualizacion = :fecha",
         ExpressionAttributeValues={
-            ":habil": False,
-            ":fecha": now
-        }
+            ":habil": habil,
+            ":fecha": now,
+        },
     )
 
-    return {"message": "Proyecto deshabilitado correctamente"}
-
+    return {
+        "message": "Proyecto habilitado correctamente"
+        if habil else
+        "Proyecto deshabilitado correctamente"
+    }

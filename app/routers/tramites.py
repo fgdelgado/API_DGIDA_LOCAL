@@ -3,6 +3,8 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 
+from boto3.dynamodb.conditions import Key
+
 from models.tramites import (
     TramiteCreate,
     TramiteUpdate,
@@ -20,10 +22,7 @@ router = APIRouter(
 
 dynamodb = get_dynamodb_resource()
 
-# Nombre de la tabla DynamoDB
-TABLE_NAME = "api_data"
-
-# Referencia a la tabla
+TABLE_NAME = "api_data_nube"
 table = dynamodb.Table(TABLE_NAME)
 
 
@@ -40,49 +39,48 @@ def crear_tramite(data: TramiteCreate):
         "PK": f"INSTITUCION#{data.id_institucion}",
         "SK": f"TRAMITE#{id_tramite}",
 
+        # GSI para búsquedas por id_tramite
+        "GSI1PK": f"TRAMITE#{id_tramite}",
+        "GSI1SK": "METADATA",
+
         "id_tramite": id_tramite,
         "id_institucion": data.id_institucion,
-
         "nombre_tramite": data.nombre_tramite,
         "descripcion": data.descripcion,
         "tipo_tramite": data.tipo_tramite,
         "canal_atencion": data.canal_atencion,
         "costo": data.costo,
         "requisitos": data.requisitos,
-
         "habil": data.habil,
         "fecha_creacion": now,
         "fecha_actualizacion": now,
     }
 
     table.put_item(Item=item)
-
     return item
 
 
 # --------------------------------------------------
-# Listar trámites
-# GET /tramites
+# Listar trámites por institución
+# GET /tramites?id_institucion=...
 # --------------------------------------------------
 @router.get("", response_model=List[TramiteListItem])
 def listar_tramites(
-    id_institucion: Optional[str] = Query(None),
+    id_institucion: str = Query(...),
     habil: Optional[bool] = Query(None),
 ):
-    # Scan temporal (igual que instituciones)
-    response = table.scan()
+    response = table.query(
+        KeyConditionExpression=(
+            Key("PK").eq(f"INSTITUCION#{id_institucion}") &
+            Key("SK").begins_with("TRAMITE#")
+        )
+    )
+
     items = response.get("Items", [])
 
     tramites = []
-
     for item in items:
-        if not item.get("SK", "").startswith("TRAMITE#"):
-            continue
-
-        if id_institucion and item.get("id_institucion") != id_institucion:
-            continue
-
-        if habil is not None and item.get("habil") != habil:
+        if habil is not None and item["habil"] != habil:
             continue
 
         tramites.append({
@@ -95,19 +93,21 @@ def listar_tramites(
 
 
 # --------------------------------------------------
-# Obtener trámite
+# Obtener trámite por id
 # GET /tramites/{id_tramite}
 # --------------------------------------------------
 @router.get("/{id_tramite}", response_model=TramiteResponse)
 def obtener_tramite(id_tramite: str):
-    response = table.scan()
+    response = table.query(
+        IndexName="GSI1",
+        KeyConditionExpression=Key("GSI1PK").eq(f"TRAMITE#{id_tramite}")
+    )
+
     items = response.get("Items", [])
+    if not items:
+        raise HTTPException(status_code=404, detail="Trámite no encontrado")
 
-    for item in items:
-        if item.get("id_tramite") == id_tramite:
-            return item
-
-    raise HTTPException(status_code=404, detail="Trámite no encontrado")
+    return items[0]
 
 
 # --------------------------------------------------
@@ -118,17 +118,16 @@ def obtener_tramite(id_tramite: str):
 def actualizar_tramite(id_tramite: str, data: TramiteUpdate):
     now = datetime.utcnow().isoformat()
 
-    # Buscar primero (temporal)
-    response = table.scan()
-    items = response.get("Items", [])
-
-    tramite = next(
-        (item for item in items if item.get("id_tramite") == id_tramite),
-        None
+    response = table.query(
+        IndexName="GSI1",
+        KeyConditionExpression=Key("GSI1PK").eq(f"TRAMITE#{id_tramite}")
     )
 
-    if not tramite:
+    items = response.get("Items", [])
+    if not items:
         raise HTTPException(status_code=404, detail="Trámite no encontrado")
+
+    tramite = items[0]
 
     update_expression = []
     expression_values = {}
@@ -149,7 +148,6 @@ def actualizar_tramite(id_tramite: str, data: TramiteUpdate):
     update_expression.append("fecha_actualizacion = :fecha")
     expression_values[":fecha"] = now
 
-    # Construcción segura del update
     update_kwargs = {
         "Key": {
             "PK": tramite["PK"],
@@ -160,12 +158,10 @@ def actualizar_tramite(id_tramite: str, data: TramiteUpdate):
         "ReturnValues": "ALL_NEW",
     }
 
-    # SOLO si se usó 'habil'
     if expression_names:
         update_kwargs["ExpressionAttributeNames"] = expression_names
 
     response = table.update_item(**update_kwargs)
-
     return response["Attributes"]
 
 
@@ -177,29 +173,21 @@ def actualizar_tramite(id_tramite: str, data: TramiteUpdate):
 def deshabilitar_tramite(id_tramite: str):
     now = datetime.utcnow().isoformat()
 
-    response = table.scan()
-    items = response.get("Items", [])
-
-    tramite = next(
-        (item for item in items if item.get("id_tramite") == id_tramite),
-        None
+    response = table.query(
+        IndexName="GSI1",
+        KeyConditionExpression=Key("GSI1PK").eq(f"TRAMITE#{id_tramite}")
     )
 
-    if not tramite:
+    items = response.get("Items", [])
+    if not items:
         raise HTTPException(status_code=404, detail="Trámite no encontrado")
 
+    tramite = items[0]
+
     table.update_item(
-        Key={
-            "PK": tramite["PK"],
-            "SK": tramite["SK"],
-        },
-        UpdateExpression=(
-            "SET #habil = :habil, "
-            "fecha_actualizacion = :fecha"
-        ),
-        ExpressionAttributeNames={
-            "#habil": "habil"
-        },
+        Key={"PK": tramite["PK"], "SK": tramite["SK"]},
+        UpdateExpression="SET #habil = :habil, fecha_actualizacion = :fecha",
+        ExpressionAttributeNames={"#habil": "habil"},
         ExpressionAttributeValues={
             ":habil": False,
             ":fecha": now,
@@ -217,29 +205,21 @@ def deshabilitar_tramite(id_tramite: str):
 def habilitar_tramite(id_tramite: str):
     now = datetime.utcnow().isoformat()
 
-    response = table.scan()
-    items = response.get("Items", [])
-
-    tramite = next(
-        (item for item in items if item.get("id_tramite") == id_tramite),
-        None
+    response = table.query(
+        IndexName="GSI1",
+        KeyConditionExpression=Key("GSI1PK").eq(f"TRAMITE#{id_tramite}")
     )
 
-    if not tramite:
+    items = response.get("Items", [])
+    if not items:
         raise HTTPException(status_code=404, detail="Trámite no encontrado")
 
+    tramite = items[0]
+
     table.update_item(
-        Key={
-            "PK": tramite["PK"],
-            "SK": tramite["SK"],
-        },
-        UpdateExpression=(
-            "SET #habil = :habil, "
-            "fecha_actualizacion = :fecha"
-        ),
-        ExpressionAttributeNames={
-            "#habil": "habil"
-        },
+        Key={"PK": tramite["PK"], "SK": tramite["SK"]},
+        UpdateExpression="SET #habil = :habil, fecha_actualizacion = :fecha",
+        ExpressionAttributeNames={"#habil": "habil"},
         ExpressionAttributeValues={
             ":habil": True,
             ":fecha": now,

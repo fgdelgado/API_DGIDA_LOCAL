@@ -27,12 +27,12 @@ class TramiteCreate(TramiteBase):
 # Update (todos opcionales)
 # ------------------------------
 class TramiteUpdate(BaseModel):
-    nombre_tramite: Optional[str]
-    descripcion: Optional[str]
-    tipo_tramite: Optional[str]
-    canal_atencion: Optional[str]
-    costo: Optional[str]
-    requisitos: Optional[List[str]]
+    nombre_tramite: Optional[str] = None
+    descripcion: Optional[str] = None
+    tipo_tramite: Optional[str] = None
+    canal_atencion: Optional[str] = None
+    costo: Optional[str] = None
+    requisitos: Optional[List[str]] = None
 
 
 # ------------------------------
