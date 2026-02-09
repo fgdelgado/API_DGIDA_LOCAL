@@ -2,14 +2,17 @@ FROM public.ecr.aws/lambda/python:3.11
 
 WORKDIR /build
 
+# Instalamos zip
+RUN yum install -y zip && yum clean all
+
 # Copiamos requirements
-COPY requirements.txt .
+COPY app/requirements.txt requirements.txt
 
 # Instalamos dependencias en /build/python
 RUN pip install --no-cache-dir -r requirements.txt -t python
 
 # Copiamos el código de la app
-COPY . .
+COPY app/ .
 
 # Limpiamos cosas innecesarias
 RUN rm -rf lambda_build \
