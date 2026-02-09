@@ -8,47 +8,64 @@ from botocore.exceptions import (
     ConnectTimeoutError,
 )
 
+def is_aws():
+    return os.getenv("AWS_EXECUTION_ENV") is not None
+
 def get_dynamodb_client():
-    # Timeouts bajos para que /health responda rápido
     config = Config(
-        connect_timeout=1,   # segundos
-        read_timeout=1,      # segundos
-        retries={"max_attempts": 1}  # reduce reintentos
+        connect_timeout=1,
+        read_timeout=1,
+        retries={"max_attempts": 1}
     )
 
-    return boto3.client(
-        "dynamodb",
-        region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
-        endpoint_url=os.getenv("DYNAMODB_ENDPOINT"),
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "dummy"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "dummy"),
-        config=config,
-    )
+    if is_aws():
+        # AWS DynamoDB (SIN endpoint_url)
+        return boto3.client(
+            "dynamodb",
+            region_name=os.getenv("AWS_REGION", "us-east-1"),
+            config=config,
+        )
+    else:
+        # DynamoDB Local
+        return boto3.client(
+            "dynamodb",
+            region_name="us-east-1",
+            endpoint_url=os.getenv("DYNAMODB_ENDPOINT"),
+            aws_access_key_id="dummy",
+            aws_secret_access_key="dummy",
+            config=config,
+        )
+
+def get_dynamodb_resource():
+    if is_aws():
+        return boto3.resource(
+            "dynamodb",
+            region_name=os.getenv("AWS_REGION", "us-east-1"),
+        )
+    else:
+        return boto3.resource(
+            "dynamodb",
+            region_name="us-east-1",
+            endpoint_url=os.getenv("DYNAMODB_ENDPOINT"),
+            aws_access_key_id="dummy",
+            aws_secret_access_key="dummy",
+        )
 
 def check_dynamodb_connection():
-    endpoint = os.getenv("DYNAMODB_ENDPOINT")
-    if not endpoint:
-        return {"ok": False, "error": "DYNAMODB_ENDPOINT no está definido"}
-
     try:
         dynamodb = get_dynamodb_client()
         dynamodb.list_tables()
-        return {"ok": True, "status": "connected", "endpoint": endpoint}
+
+        return {
+            "ok": True,
+            "env": "aws" if is_aws() else "local"
+        }
 
     except (EndpointConnectionError, ReadTimeoutError, ConnectTimeoutError) as e:
-        return {"ok": False, "error": "timeout/conexión", "details": str(e), "endpoint": endpoint}
+        return {"ok": False, "error": "timeout/conexion", "details": str(e)}
 
     except ClientError as e:
-        return {"ok": False, "error": "client_error", "details": e.response["Error"]["Message"], "endpoint": endpoint}
+        return {"ok": False, "error": "client_error", "details": e.response["Error"]["Message"]}
 
     except Exception as e:
-        return {"ok": False, "error": "unknown_error", "details": str(e), "endpoint": endpoint}
-
-def get_dynamodb_resource():
-    return boto3.resource(
-        "dynamodb",
-        region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
-        endpoint_url=os.getenv("DYNAMODB_ENDPOINT"),
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "dummy"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "dummy"),
-    )
+        return {"ok": False, "error": "unknown_error", "details": str(e)}
