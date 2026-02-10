@@ -8,8 +8,8 @@ RUN yum install -y zip && yum clean all
 # Copiamos requirements
 COPY app/requirements.txt requirements.txt
 
-# Instalamos dependencias en /build/python
-RUN pip install --no-cache-dir -r requirements.txt -t python
+# INSTALAR DEPENDENCIAS EN LA RAÍZ
+RUN pip install --no-cache-dir -r requirements.txt -t .
 
 # Copiamos el código de la app
 COPY app/ .
