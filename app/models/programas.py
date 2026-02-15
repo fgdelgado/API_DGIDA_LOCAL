@@ -17,7 +17,6 @@ class ProgramaCreate(ProgramaBase):
 class ProgramaUpdate(BaseModel):
     nombre: Optional[str] = None
     descripcion: Optional[str] = None
-    habil: Optional[bool] = None
 
 
 class ProgramaResponse(ProgramaBase):
