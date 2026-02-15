@@ -94,7 +94,7 @@ def obtener_programa(id_programa: str):
 
     items = response.get("Items", [])
     if not items:
-        raise HTTPException(status_code=404, detail="Programa no encontrado")
+        raise HTTPException(status_code=404, detail="Programa no encontrado, verificar id programa ingresado")
 
     return items[0]
 
@@ -112,7 +112,7 @@ def actualizar_programa(id_programa: str, data: ProgramaUpdate):
 
     items = response.get("Items", [])
     if not items:
-        raise HTTPException(status_code=404, detail="Programa no encontrado")
+        raise HTTPException(status_code=404, detail="Programa no encontrado, verificar id programa ingresado")
 
     programa = items[0]
 
@@ -124,7 +124,7 @@ def actualizar_programa(id_programa: str, data: ProgramaUpdate):
         expression_values[f":{field}"] = value
 
     if not update_expression:
-        raise HTTPException(status_code=400, detail="No hay campos para actualizar")
+        raise HTTPException(status_code=400, detail="No hay campos para actualizar o no coinciden con los existentes")
 
     update_expression.append("fecha_actualizacion = :fecha")
     expression_values[":fecha"] = now
@@ -168,7 +168,7 @@ def _set_habil_programa(id_programa: str, habil: bool):
 
     items = response.get("Items", [])
     if not items:
-        raise HTTPException(status_code=404, detail="Programa no encontrado")
+        raise HTTPException(status_code=404, detail="Programa no encontrado, verificar id_programa ingresado")
 
     programa = items[0]
 

@@ -98,7 +98,7 @@ def obtener_proyecto(id_proyecto: str):
 
     items = response.get("Items", [])
     if not items:
-        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado, verificar id_proyecto ingresado")
 
     return items[0]
 
@@ -117,7 +117,7 @@ def actualizar_proyecto(id_proyecto: str, data: ProyectoUpdate):
 
     items = response.get("Items", [])
     if not items:
-        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado, verificar id_proyecto ingresado")
 
     proyecto = items[0]
 
@@ -129,7 +129,7 @@ def actualizar_proyecto(id_proyecto: str, data: ProyectoUpdate):
         expression_values[f":{field}"] = value
 
     if not update_expression:
-        raise HTTPException(status_code=400, detail="No hay campos para actualizar")
+        raise HTTPException(status_code=400, detail="No hay campos para actualizar o no coinciden con los existentes")
 
     update_expression.append("fecha_actualizacion = :fecha")
     expression_values[":fecha"] = now
@@ -173,7 +173,7 @@ def _set_habil_proyecto(id_proyecto: str, habil: bool):
 
     items = response.get("Items", [])
     if not items:
-        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado, verificar id_proyecto ingresado")
 
     proyecto = items[0]
 

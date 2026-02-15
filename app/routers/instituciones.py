@@ -65,7 +65,7 @@ def obtener_institucion(id_institucion: str):
     )
 
     if "Item" not in response:
-        raise HTTPException(status_code=404, detail="Institución no encontrada")
+        raise HTTPException(status_code=404, detail="Institución no encontrada, verificar id_institucion ingresado")
 
     return response["Item"]
 
@@ -108,7 +108,7 @@ def actualizar_institucion(id_institucion: str, data: InstitucionUpdate):
         expression_values[f":{field}"] = value
 
     if not update_expression:
-        raise HTTPException(status_code=400, detail="No hay campos para actualizar")
+        raise HTTPException(status_code=400, detail="No hay campos para actualizar o no coinciden con los existentes")
 
     update_expression.append("fecha_actualizacion = :fecha_actualizacion")
     expression_values[":fecha_actualizacion"] = now

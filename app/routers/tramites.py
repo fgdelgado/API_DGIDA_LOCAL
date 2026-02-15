@@ -105,7 +105,7 @@ def obtener_tramite(id_tramite: str):
 
     items = response.get("Items", [])
     if not items:
-        raise HTTPException(status_code=404, detail="Trámite no encontrado")
+        raise HTTPException(status_code=404, detail="Trámite no encontrado, verificar id_tramite ingresado")
 
     return items[0]
 
@@ -125,7 +125,7 @@ def actualizar_tramite(id_tramite: str, data: TramiteUpdate):
 
     items = response.get("Items", [])
     if not items:
-        raise HTTPException(status_code=404, detail="Trámite no encontrado")
+        raise HTTPException(status_code=404, detail="Trámite no encontrado, verificar id_tramite ingresado")
 
     tramite = items[0]
 
@@ -143,7 +143,7 @@ def actualizar_tramite(id_tramite: str, data: TramiteUpdate):
             expression_values[f":{field}"] = value
 
     if not update_expression:
-        raise HTTPException(status_code=400, detail="No hay campos para actualizar")
+        raise HTTPException(status_code=400, detail="No hay campos para actualizar o no coinciden con los existentes")
 
     update_expression.append("fecha_actualizacion = :fecha")
     expression_values[":fecha"] = now
@@ -180,7 +180,7 @@ def deshabilitar_tramite(id_tramite: str):
 
     items = response.get("Items", [])
     if not items:
-        raise HTTPException(status_code=404, detail="Trámite no encontrado")
+        raise HTTPException(status_code=404, detail="Trámite no encontrado, verificar id_tramite ingresado")
 
     tramite = items[0]
 
@@ -212,7 +212,7 @@ def habilitar_tramite(id_tramite: str):
 
     items = response.get("Items", [])
     if not items:
-        raise HTTPException(status_code=404, detail="Trámite no encontrado")
+        raise HTTPException(status_code=404, detail="Trámite no encontrado, verificar id_tramite ingresado")
 
     tramite = items[0]
 
