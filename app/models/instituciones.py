@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional
 
 # Modelo para CREAR una institución
@@ -7,7 +7,7 @@ class InstitucionCreate(BaseModel):
     nombre: str
     departamento_sede: str
     municipio_sede: str
-    telefono: str
+    telefono: EmailStr
     correo: str
 
 # Modelo para ACTUALIZAR una institución
@@ -17,7 +17,7 @@ class InstitucionUpdate(BaseModel):
     departamento_sede: Optional[str] = None
     municipio_sede: Optional[str] = None
     telefono: Optional[str] = None
-    correo: Optional[str] = None
+    correo: Optional[EmailStr] = None
 
 # Modelo de RESPUESTA completa
 # Define lo que la API devuelve al cliente
@@ -27,7 +27,7 @@ class InstitucionResponse(BaseModel):
     departamento_sede: str
     municipio_sede: str
     telefono: str
-    correo: str
+    correo: EmailStr
     habil: bool
     fecha_creacion: str
     fecha_actualizacion: str
