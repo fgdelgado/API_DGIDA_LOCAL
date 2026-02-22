@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from exceptions import validation_exception_handler
 from database import check_dynamodb_connection
 from routers.instituciones import router as instituciones_router
 from routers.tramites import router as tramites_router
@@ -7,6 +9,8 @@ from routers.programas import router as programas_router
 from mangum import Mangum
 
 app = FastAPI()
+
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 @app.get("/")
 def root():
