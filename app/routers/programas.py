@@ -25,8 +25,27 @@ table = dynamodb.Table("api_data_nube")
 # --------------------------------------------------
 # Crear programa
 # --------------------------------------------------
+
 @router.post("", response_model=ProgramaResponse)
 def crear_programa(data: ProgramaCreate):
+
+    # Verificar que la institución exista
+    institucion_response = table.get_item(
+        Key={
+            "PK": f"INSTITUCION#{data.id_institucion}",
+            "SK": "METADATA"  # ajusta si usas otro valor
+        }
+    )
+
+    print("Verificando institución:", data.id_institucion)
+    print("Respuesta get_item:", institucion_response)
+
+    if "Item" not in institucion_response:
+        raise HTTPException(
+            status_code=404,
+            detail="La institución no existe."
+        )
+
     now = datetime.utcnow().isoformat()
     id_programa = f"PRG-{uuid.uuid4().hex[:8]}"
 
@@ -51,6 +70,7 @@ def crear_programa(data: ProgramaCreate):
 
     table.put_item(Item=item)
     return item
+
 
 # --------------------------------------------------
 # Listar programas por institución (OPTIMIZADO)

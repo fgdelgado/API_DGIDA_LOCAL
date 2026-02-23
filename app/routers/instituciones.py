@@ -98,6 +98,21 @@ def listar_instituciones(habil: Optional[bool] = Query(None)):
 # --------------------------------------------------
 @router.patch("/{id_institucion}", response_model=InstitucionResponse)
 def actualizar_institucion(id_institucion: str, data: InstitucionUpdate):
+
+    # Verificar existencia
+    institucion_response = table.get_item(
+        Key={
+            "PK": f"INSTITUCION#{id_institucion}",
+            "SK": "METADATA"
+        }
+    )
+
+    if "Item" not in institucion_response:
+        raise HTTPException(
+            status_code=404,
+            detail="La institución no existe."
+        )
+
     now = datetime.utcnow().isoformat()
 
     update_expression = []

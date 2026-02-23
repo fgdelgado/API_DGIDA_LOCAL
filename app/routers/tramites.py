@@ -32,6 +32,22 @@ table = dynamodb.Table(TABLE_NAME)
 # --------------------------------------------------
 @router.post("", response_model=TramiteResponse)
 def crear_tramite(data: TramiteCreate):
+
+    # Verificar que la institución exista
+    institucion_response = table.get_item(
+        Key={
+            "PK": f"INSTITUCION#{data.id_institucion}",
+            "SK": "METADATA"  # ajusta si usas otro valor
+        }
+    )
+
+    if "Item" not in institucion_response:
+        raise HTTPException(
+            status_code=404,
+            detail="La institución no existe."
+        )
+
+
     now = datetime.utcnow().isoformat()
     id_tramite = f"TRM-{uuid.uuid4().hex[:8]}"
 

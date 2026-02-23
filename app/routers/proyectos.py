@@ -27,6 +27,21 @@ table = dynamodb.Table("api_data_nube")
 # --------------------------------------------------
 @router.post("", response_model=ProyectoResponse)
 def crear_proyecto(data: ProyectoCreate):
+
+    # Verificar que la institución exista
+    institucion_response = table.get_item(
+        Key={
+            "PK": f"INSTITUCION#{data.id_institucion}",
+            "SK": "METADATA"  # ajusta si usas otro valor
+        }
+    )
+
+    if "Item" not in institucion_response:
+        raise HTTPException(
+            status_code=404,
+            detail="La institución no existe."
+        )
+
     now = datetime.utcnow().isoformat()
     id_proyecto = f"PRY-{uuid4().hex[:8]}"
 
