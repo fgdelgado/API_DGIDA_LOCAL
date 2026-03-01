@@ -77,6 +77,21 @@ def listar_proyectos(
     id_institucion: str = Query(...),
     habil: Optional[bool] = Query(None),
 ):
+
+    # Verificar que la institución exista
+    institucion_response = table.get_item(
+        Key={
+            "PK": f"INSTITUCION#{id_institucion}",
+            "SK": "METADATA"  # ajusta si usas otro valor
+        }
+    )
+
+    if "Item" not in institucion_response:
+        raise HTTPException(
+            status_code=404,
+            detail="La institución no existe."
+        )
+
     response = table.query(
         KeyConditionExpression=(
             Key("PK").eq(f"INSTITUCION#{id_institucion}") &
