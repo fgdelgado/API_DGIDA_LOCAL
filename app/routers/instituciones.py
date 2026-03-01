@@ -147,6 +147,20 @@ def actualizar_institucion(id_institucion: str, data: InstitucionUpdate):
 def habilitar_institucion(id_institucion: str):
     now = datetime.utcnow().isoformat()
 
+    # Verificar existencia
+    institucion_response = table.get_item(
+        Key={
+            "PK": f"INSTITUCION#{id_institucion}",
+            "SK": "METADATA"
+        }
+    )
+
+    if "Item" not in institucion_response:
+        raise HTTPException(
+            status_code=404,
+            detail="La institución no existe."
+        )
+
     table.update_item(
         Key={
             "PK": f"INSTITUCION#{id_institucion}",
@@ -167,6 +181,20 @@ def habilitar_institucion(id_institucion: str):
 @router.delete("/{id_institucion}")
 def eliminar_institucion(id_institucion: str):
     now = datetime.utcnow().isoformat()
+
+    # Verificar existencia
+    institucion_response = table.get_item(
+        Key={
+            "PK": f"INSTITUCION#{id_institucion}",
+            "SK": "METADATA"
+        }
+    )
+
+    if "Item" not in institucion_response:
+        raise HTTPException(
+            status_code=404,
+            detail="La institución no existe."
+        )
 
     table.update_item(
         Key={
